@@ -9,8 +9,6 @@ RUN npm install
 
 COPY . .
 
-
 EXPOSE 3000
 
-# App başlat
 CMD ["npm", "run", "dev"]
