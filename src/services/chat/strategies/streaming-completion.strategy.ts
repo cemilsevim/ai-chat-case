@@ -1,51 +1,60 @@
 import { ICompletionStrategy } from './completion-strategy.interface';
-import { ChatService } from '../chat.service';
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { ChatCompletionRequestDto, ChatIdRequestDto } from '../../../dto';
 import { FeatureFlagsService } from '../../feature-flags';
 import { FEATURE_FLAG_KEYS } from '../../../configs';
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { CompletionResult } from '../chat-service.interface';
 
 export class StreamingCompletionStrategy implements ICompletionStrategy {
     constructor(
-        private readonly chatService: ChatService,
         private readonly featureFlagService: FeatureFlagsService,
+        private readonly req: FastifyRequest,
+        private readonly reply: FastifyReply,
     ) {}
 
-    async execute(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-        const user = req.user as FastifyRequest['user'];
-        const userId = user?.id as string;
-        const chatId = (req.params as ChatIdRequestDto).chatId;
-        const chatCompletionRequestDto = req.body as ChatCompletionRequestDto;
+    async execute(message: string): Promise<CompletionResult> {
+        this.reply.raw.setHeader(
+            'Content-Type',
+            'text/event-stream; charset=utf-8',
+        );
+        this.reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
+        this.reply.raw.setHeader('Connection', 'keep-alive');
+        this.reply.raw.setHeader('X-Accel-Buffering', 'no');
 
-        reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-        reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
-        reply.raw.setHeader('Connection', 'keep-alive');
-        reply.raw.setHeader('X-Accel-Buffering', 'no');
+        this.reply.raw.flushHeaders?.();
+        this.reply.hijack();
 
-        reply.raw.flushHeaders?.();
-        reply.hijack();
+        let assistanMessage: string = '';
 
         try {
-            const aiToolsEnabled = await this.featureFlagService.getBoolean(
-                FEATURE_FLAG_KEYS.AI_TOOLS_ENABLED,
-                false,
+            this.reply.raw.write(
+                `event: started\ndata: {"status":"started"}\n\n`,
             );
 
-            await this.chatService.streamCompletion(
-                chatCompletionRequestDto,
-                chatId,
-                userId,
-                (chunk: string) => {
-                    reply.raw.write(`data: ${chunk}\n\n`);
-                },
-                aiToolsEnabled,
-            );
+            const stream = await streamText({
+                model: openai('gpt-4.1-nano'),
+                messages: [
+                    {
+                        role: 'user',
+                        content: message,
+                    },
+                ],
+            });
 
-            reply.raw.write(`event: end\ndata: [DONE]\n\n`);
+            for await (const chunk of stream.textStream) {
+                assistanMessage += chunk;
+
+                this.reply.raw.write(`data: ${chunk}\n\n`);
+            }
+
+            this.reply.raw.write(`event: end\ndata: [DONE]\n\n`);
         } catch (error) {
-            reply.raw.write(`event: error\ndata: streaming_error\n\n`);
+            this.reply.raw.write(`event: error\ndata: streaming_error\n\n`);
         } finally {
-            reply.raw.end();
+            this.reply.raw.end();
         }
+
+        return assistanMessage;
     }
 }

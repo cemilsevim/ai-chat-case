@@ -1,5 +1,5 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { CompletionResult } from '../..';
 
 export interface ICompletionStrategy {
-  execute(req: FastifyRequest, res: FastifyReply): Promise<void>;
+    execute(message: string): Promise<CompletionResult>;
 }

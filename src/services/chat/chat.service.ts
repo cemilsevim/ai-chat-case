@@ -1,7 +1,5 @@
 import { ChatCompletionRequestDto } from '../../dto';
 import { ChatRepository } from '../../repositories';
-import { streamText, generateText, tool } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { ApiException, CommonExceptionCodes } from '../../infrastructure';
 import { MessageService } from '../message.service';
 import { Chat } from '@prisma/client';
@@ -16,19 +14,23 @@ import {
     MAX_PAGINATION_LIMIT,
     MIN_PAGINATION_LIMIT,
 } from '../../configs/feature-flag.config';
-import { getCurrentWeather } from './ai.tools';
+import { ICompletionStrategy } from './strategies';
 
 export class ChatService {
     constructor(
         private readonly chatRepository: ChatRepository,
         private readonly messageService: MessageService,
+        private completionStrategy: ICompletionStrategy,
     ) {}
+
+    setStrategy(completionStrategy: ICompletionStrategy) {
+        this.completionStrategy = completionStrategy;
+    }
 
     async completion(
         { message }: ChatCompletionRequestDto,
         chatId: string,
         userId: string,
-        aiToolsEnabled: boolean = false,
     ): Promise<CompletionResult> {
         const chat = await this.createChatWithOwnershipCheck(
             message,
@@ -38,80 +40,17 @@ export class ChatService {
 
         await this.messageService.createMessage(chat.id, message, 'user');
 
-        const generatedText = await generateText({
-            model: openai('gpt-4.1-nano'),
-            messages: [
-                {
-                    role: 'user',
-                    content: message,
-                },
-            ],
-            tools: aiToolsEnabled
-                ? {
-                      getCurrentWeather,
-                  }
-                : {},
-        });
+        const generatedMessage = await this.completionStrategy.execute(message);
 
-        if (generatedText.toolResults?.length) {
-            return {
-                toolName: generatedText.toolResults[0].toolName,
-                data: generatedText.toolResults[0].output,
-            };
+        if (typeof generatedMessage === 'string') {
+            await this.messageService.createMessage(
+                chat.id,
+                generatedMessage,
+                'assistant',
+            );
         }
 
-        await this.messageService.createMessage(
-            chat.id,
-            generatedText.text,
-            'assistant',
-        );
-
-        return generatedText.text;
-    }
-
-    async streamCompletion(
-        { message }: ChatCompletionRequestDto,
-        chatId: string,
-        userId: string,
-        streamCallback: (chunk: string) => void,
-        aiToolsEnabled: boolean = false,
-    ): Promise<CompletionResult> {
-        const chat = await this.createChatWithOwnershipCheck(
-            message,
-            chatId,
-            userId,
-        );
-
-        await this.messageService.createMessage(chat.id, message, 'user');
-
-        const stream = await streamText({
-            model: openai('gpt-4.1-nano'),
-            messages: [
-                {
-                    role: 'user',
-                    content: message,
-                },
-            ],
-            tools: aiToolsEnabled
-                ? {
-                      getCurrentWeather,
-                  }
-                : {},
-        });
-
-        let assistanMessage: string = '';
-        for await (const chunk of stream.textStream) {
-            streamCallback(chunk);
-            assistanMessage += chunk;
-        }
-
-        await this.messageService.createMessage(
-            chat.id,
-            assistanMessage,
-            'assistant',
-        );
-
-        return assistanMessage;
+        return generatedMessage;
     }
 
     async getChatById(chatId: string) {

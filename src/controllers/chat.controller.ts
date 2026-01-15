@@ -3,7 +3,11 @@ import { ChatService } from '../services/chat/chat.service';
 import { CompletionStrategyFactory } from '../services/chat';
 import { FeatureFlagsService } from '../services';
 import { FEATURE_FLAG_KEYS } from '../configs';
-import { BaseResponseDto, ChatIdRequestDto } from '../dto';
+import {
+    BaseResponseDto,
+    ChatCompletionRequestDto,
+    ChatIdRequestDto,
+} from '../dto';
 
 export class ChatController {
     constructor(
@@ -58,13 +62,26 @@ export class ChatController {
     }
 
     async chatCompletion(request: FastifyRequest, reply: FastifyReply) {
+        const user = request.user as FastifyRequest['user'];
+        const userId = user?.id as string;
+        const chatId = (request.params as ChatIdRequestDto).chatId;
+
         const streamingEnabled = await this.featureFlagService.getBoolean(
             FEATURE_FLAG_KEYS.STREAMING_ENABLED,
             false,
         );
 
-        const completionStrategy =
-            this.completionStrategyFactory.create(streamingEnabled);
-        await completionStrategy.execute(request, reply);
+        const completionStrategy = this.completionStrategyFactory.create(
+            streamingEnabled,
+            request,
+            reply,
+        );
+        this.chatService.setStrategy(completionStrategy);
+
+        await this.chatService.completion(
+            request.body as ChatCompletionRequestDto,
+            chatId,
+            userId,
+        );
     }
 }
