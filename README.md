@@ -91,6 +91,5 @@ Tüm endpoint'ler Bearer token ile korunur; `Authorization: Bearer <JWT>` başl�
 ### Yardımcı Notlar
 - Logger varsayılan olarak `application.log` dosyasına yazar; `LOG_FILE` ile özelleştirilebilir.
 - Redis feature flag stratejisi için öncelikle `featureFlagService.init()` çalıştırılır; Docker senaryosunda Redis servisi otomatik olarak compose ile ayağa kalkar.
-- Proje TypeScript ile yazılmıştır; yeni tip tanımları için `src/types` dizinini kullanın.
 
 Sorun yaşarsanız `docker compose down -v` ile ortamı sıfırlayabilir ve yeniden başlatabilirsiniz.
