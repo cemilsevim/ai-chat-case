@@ -16,6 +16,7 @@ import {
     RedisFeatureFlagStrategy,
     CompletionStrategyFactory,
     FirebaseRemoteConfigStrategy,
+    JsonCompletionStrategy,
 } from './services';
 import { ChatRepository, MessageRepository } from './repositories';
 import { ServiceAccount } from 'firebase-admin';
@@ -62,11 +63,6 @@ export class FastifyServer {
         this.authMiddleware = new AuthMiddleware();
         this.messageService = new MessageService(this.messageRepository);
         this.chatRepository = new ChatRepository(prisma);
-        this.chatService = new ChatService(
-            this.chatRepository,
-            this.messageService,
-        );
-
         // this.featureFlagService = new FeatureFlagsService(
         //     new FirebaseRemoteConfigStrategy({
         //         projectId: process.env.FIREBASE_PROJECT_ID,
@@ -78,10 +74,16 @@ export class FastifyServer {
         );
         this.featureFlagService.init();
 
+        this.chatService = new ChatService(
+            this.chatRepository,
+            this.messageService,
+            new JsonCompletionStrategy(this.featureFlagService, null, null),
+        );
         this.completionStrategyFactory = new CompletionStrategyFactory(
             this.chatService,
             this.featureFlagService,
         );
+
         this.chatController = new ChatController(
             this.chatService,
             this.completionStrategyFactory,

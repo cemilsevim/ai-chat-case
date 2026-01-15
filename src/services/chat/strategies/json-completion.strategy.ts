@@ -11,8 +11,8 @@ import { CompletionResult } from '../chat-service.interface';
 export class JsonCompletionStrategy implements ICompletionStrategy {
     constructor(
         private readonly featureFlagService: FeatureFlagsService,
-        private readonly req: FastifyRequest,
-        private readonly reply: FastifyReply,
+        private readonly req: FastifyRequest | null,
+        private readonly reply: FastifyReply | null,
     ) {}
 
     async execute(message: string): Promise<CompletionResult> {
@@ -45,12 +45,14 @@ export class JsonCompletionStrategy implements ICompletionStrategy {
             };
         }
 
-        this.reply.send(
-            new BaseResponseDto(false, {
-                role: 'assistant',
-                content: result,
-            }),
-        );
+        if (this.reply) {
+            this.reply.send(
+                new BaseResponseDto(false, {
+                    role: 'assistant',
+                    content: result,
+                }),
+            );
+        }
 
         return result;
     }
