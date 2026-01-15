@@ -12,7 +12,7 @@ Fastify tabanlı bu proje, AI destekli sohbet akışlarını sunarken kullanıc�
 ### Gereksinimler
 - Node.js 20+ ve npm
 - Docker & Docker Compose (opsiyonel fakat tavsiye edilen kurulum yolu)
-- PostgreSQL erişimi (development için harici DB veya başka bir container)
+- PostgreSQL
 
 ### Kurulum
 1. Repoyu klonlayın ve kök dizine geçin.
